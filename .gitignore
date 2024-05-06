@@ -3,3 +3,5 @@ uuz.o
 test_data
 *.gdb
 .gdb_history
+*.json
+perf*

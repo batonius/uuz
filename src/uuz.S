@@ -49,10 +49,12 @@ end_frame
     mov VAR(zip_file_fd), rax
     sys_call_or in_file_error, SYS_LSEEK, rax, 0, SEEK_END
     mov VAR(zip_file_size), rax
+    add rax, 1024
     sys_call_or in_file_error, SYS_MMAP, 0, rax, \
         PROT_READ, MAP_PRIVATE, VAR(zip_file_fd), 0
     mov r12, rax
-    mov VAR(out_file_buffer), rax
+    mov VAR(zip_file_buffer), rax
+    sys_call_or in_file_error, SYS_MADVISE, rax, VAR(zip_file_size), MADV_SEQUENTIAL
     # + r12 is the start of the current file header
     # > File processing loop
     # >> Open and mmap file
@@ -71,11 +73,13 @@ end_frame
     # ! rbx is the uncompressed file size left
     mov VAR(out_file_buffer_length), rbx
     sys_call_or out_file_error, SYS_FTRUNCATE, rax, rbx
+    add rbx, 1024
     sys_call_or out_file_error, SYS_MMAP, 0, rbx, \
         PROT_WRITE, MAP_SHARED, VAR(out_fd), 0
-    mov rdi, rax
-    # ! rdi is the uncompressed buffer position
     mov VAR(out_file_buffer), rax
+    sys_call_or in_file_error, SYS_MADVISE, rax, VAR(out_file_buffer_length), MADV_SEQUENTIAL
+    mov rdi, VAR(out_file_buffer)
+    # ! rdi is the uncompressed buffer position
     movzx rsi, WORD PTR [r12 + LFH_FILE_NAME_LENGHT]
     add si, WORD PTR [r12 + LFH_EXTRA_LENGTH]
     add rsi, LFH_HEADER_SIZE

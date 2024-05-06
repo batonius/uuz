@@ -7,6 +7,7 @@
 #define SYS_MUNMAP 11
 #define SYS_IOCTL 16
 #define SYS_MSYNC 26
+#define SYS_MADVISE 28
 #define SYS_EXIT 60
 #define SYS_FTRUNCATE 77
 #define SYS_MKDIR 83
@@ -40,3 +41,6 @@
 //msync defines
 #define MS_SYNC 4
 
+//madvise define
+#define MADV_SEQUENTIAL 2
+#define MADV_WILLNEED 3

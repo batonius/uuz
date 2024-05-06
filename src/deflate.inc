@@ -113,6 +113,7 @@
     shl r11, 1
     inc r12
     loop .L_loop_\@
+    dec r9w
     mov WORD PTR [rbp - \prefix_table\()_offset], r9w
 .endm
 
@@ -181,31 +182,22 @@
 .macro decode_next_huffman_ad810111214, prefix_table_name, sorted_table_name, value_size
     movzx r11, WORD PTR [rbp - \prefix_table_name\()_offset]
     next_field_huffman_ad814 r11
-    # breakpoint
-    # xor r14, r14
-    # next_bit_huffman_ad14
-    # mov r11, 1
 .L_loop_\@:
-    mov r12d, DWORD PTR [rbp - \prefix_table_name\()_offset + r11*4]
-    test r12d, r12d
-    jz .L_next_\@
-    mov r10w, r12w
-    sub r10w, r14w
-    jbe .L_next_\@
-    shr r12, 16
-    sub r12w, r10w
-.ifeq \value_size - 1
-    movzx r14, BYTE PTR [rbp - \sorted_table_name\()_offset + r12]
-.else
-    movzx r14, WORD PTR [rbp - \sorted_table_name\()_offset + r12*2]
-.endif
-    jmp .L_exit_\@
-.L_next_\@:
     next_bit_huffman_ad14
     inc r11
-    jmp .L_loop_\@
-
-.L_exit_\@:
+    mov r12d, DWORD PTR [rbp - \prefix_table_name\()_offset + r11*4]
+    test r12d, r12d
+    jz .L_loop_\@
+    mov r10w, r12w
+    sub r10w, r14w
+    jbe .L_loop_\@
+    shr r12, 16
+    sub r12w, r10w
+    .ifeq \value_size - 1
+        movzx r14, BYTE PTR [rbp - \sorted_table_name\()_offset + r12]
+    .else
+        movzx r14, WORD PTR [rbp - \sorted_table_name\()_offset + r12*2]
+    .endif
 .endm
 
 .macro decode_extra_bits_ad1114, offsets_table, extra_bits_table, result
@@ -230,6 +222,36 @@
 .endm
 
 .macro memcpy
+    rep movsb
+.endm
+
+.macro overlapping_memcpy src_dst_offset=r12
+.ifnc \src_dst_offset,r12
+    mov r12, \src_dst_offset
+.endif
+    cmp r12, 8
+    jl .L_1_byte_\@
+    cmp r12, 32
+    jl .L_8_bytes_\@
+    cmp rcx, 32
+    jl .L_8_bytes_\@
+    mov r12, rcx
+    shr rcx, 5
+.L_loop_\@:
+    vmovupd ymm1, YMMWORD PTR [rsi]
+    vmovupd YMMWORD PTR [rdi], ymm1
+    add rsi, 32
+    add rdi, 32
+    loop .L_loop_\@
+    mov rcx, r12
+    and rcx, 31
+.L_8_bytes_\@:
+    mov r12, rcx
+    shr rcx, 3
+    rep movsq
+    mov rcx, r12
+    and rcx, 7
+.L_1_byte_\@:
     rep movsb
 .endm
 
@@ -303,7 +325,8 @@ decoding_loop:
     mov r11, rsi
     mov rsi, rdi
     sub rsi, r12
-    memcpy
+    overlapping_memcpy r12
+    # memcpy
     mov rsi, r11
     jmp decoding_loop
 literal:
@@ -335,7 +358,7 @@ read_next_block:
 no_compression:
     shr rdx, 3
     sub rsi, rdx
-    movzx cx, WORD ptr [rsi]
+    mov cx, WORD ptr [rsi]
     add rsi, 4
     memcpy
     xor rdx, rdx
