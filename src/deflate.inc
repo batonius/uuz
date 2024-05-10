@@ -1,5 +1,9 @@
 # Implementing RFC 1951
 
+# "msbf" - most significant bit first, Huffman encoded
+# "lsbf" - least significant bit first, plain integer
+# "fs" - fixed sized
+
 # rax - bit buffer
 # rbx - temporary
 # rcx - temporary, memcpy len
@@ -15,14 +19,14 @@
 # r14 - value being read currently
 # r15 - always 1
 
-.macro next_bit_huffman_ad14
+.macro advance_msbf_value
     shr rax, 1
     dec dl
     shlx r14, r14, r15
     adc r14, 0
 .endm
 
-.macro next_field_huffman_fixed_ad14, field_size
+.macro read_msbf_fs_field, field_size
     xor r14, r14
     .rept \field_size
         shr rax, 1
@@ -32,7 +36,7 @@
     sub dl, \field_size
 .endm
 
-.macro next_field_huffman_ad814, field_size
+.macro read_msbf_field, field_size
     xor r14, r14
     mov r8, \field_size
 .L_loop_\@:
@@ -44,7 +48,7 @@
     sub rdx, \field_size
 .endm
 
-.macro next_field_fixed_ad814, field_size
+.macro read_lsbf_fs_field, field_size
     mov r8, (\field_size << 8)
     bextr r14, rax, r8
     shr r8, 8
@@ -52,7 +56,7 @@
     sub dl, \field_size
 .endm
 
-.macro next_field_ad814, field_size
+.macro read_lsbf_field, field_size
     xor r14, r14
     mov r8, \field_size
     shl r8, 8
@@ -61,8 +65,8 @@
     sub rdx, \field_size
 .endm
 
-.macro ensure_enough_bits_ad8
-    cmp dl, 16
+.macro ensure_enough_bits
+    cmp dl, 32
     jge .L_exit_\@
     test dl, dl
     jnz .L_single_word_\@
@@ -77,7 +81,7 @@
 .L_exit_\@:
 .endm
 
-.macro compute_prefix_counts_bc12, len_table, prefix_table, count
+.macro compute_prefix_counts, len_table, prefix_table, count
     mov rcx, \count
     lea r12, MVAR(len_table)
 .L_loop_\@:
@@ -90,7 +94,7 @@
     loop .L_loop_\@
 .endm
 
-.macro init_prefix_codes_bc9101112, prefix_table, count
+.macro compute_initial_prefix_codes_and_offsets, prefix_table, count
     xor r12, r12
     xor r11, r11
     xor r10, r10
@@ -117,7 +121,7 @@
     mov WORD PTR IN_MVAR(prefix_table, 0), r9w
 .endm
 
-.macro decode_len_table_abd8910111214 len_table, count
+.macro read_encoded_len_table, len_table, count
 .ifnc \count, r9
     movzx r9, \count
 .endif
@@ -126,8 +130,8 @@
 .L_loop_\@:
     cmp rbx, r9
     jge .L_exit_\@
-    ensure_enough_bits_ad8
-    decode_next_huffman_ad810111214 clen_prefix_table, clen_sorted_table, 1
+    ensure_enough_bits
+    read_huffman_encoded_value clen_prefix_table, clen_sorted_table, 1
     cmp r14, 17
     ja .L_extra_7_bits_\@
     je .L_extra_3_bits_\@
@@ -137,17 +141,17 @@
     inc rbx
     jb .L_loop_\@
 .L_extra_7_bits_\@:
-    next_field_fixed_ad814 7
+    read_lsbf_fs_field 7
     add r14, 11
     add rbx, r14
     jmp .L_loop_\@
 .L_extra_3_bits_\@:
-    next_field_fixed_ad814 3
+    read_lsbf_fs_field 3
     add r14, 3
     add rbx, r14
     jmp .L_loop_\@
 .L_extra_2_bits_\@:
-    next_field_fixed_ad814 2
+    read_lsbf_fs_field 2
     add r14, 3
     mov r11b, BYTE PTR [rbx - 1]
 .L_copy_loop_\@:
@@ -159,7 +163,7 @@
 .L_exit_\@:
 .endm
 
-.macro compute_prefix_codes_bc1112, len_table, prefix_table, sorted_table, count, size
+.macro compute_prefix_table_sorted_table, len_table, prefix_table, sorted_table, count, size
     xor r11, r11
     mov rcx, \count
 .L_loop_\@:
@@ -179,11 +183,11 @@
     loop .L_loop_\@
 .endm
 
-.macro decode_next_huffman_ad810111214, prefix_table, sorted_table, value_size
+.macro read_huffman_encoded_value, prefix_table, sorted_table, value_size
     movzx r11, WORD PTR MVAR(prefix_table)
-    next_field_huffman_ad814 r11
+    read_msbf_field r11
 .L_loop_\@:
-    next_bit_huffman_ad14
+    advance_msbf_value
     inc r11
     mov r12d, DWORD PTR IN_MVAR(prefix_table, r11*4)
     test r12d, r12d
@@ -200,24 +204,10 @@
     .endif
 .endm
 
-.macro decode_extra_bits_ad1114, offsets_table, extra_bits_table, result
+.macro read_extra_bits, offsets_table, extra_bits_table, result
     movzx \result, WORD PTR [\offsets_table + r14 * 2]
     movzx r11, BYTE PTR [\extra_bits_table + r14]
-    xor r14, r14
-.L_loop_\@:
-    test r11, r11
-    jz .L_exit_\@
-    next_bit_huffman_ad14
-    dec r11
-    jmp .L_loop_\@
-.L_exit_\@:
-    add \result, r14 
-.endm
-
-.macro decode_extra_bits_fixed_ad81114, offsets_table, extra_bits_table, result
-    movzx \result, WORD PTR [\offsets_table + r14 * 2]
-    movzx r11, BYTE PTR [\extra_bits_table + r14]
-    next_field_ad814 r11
+    read_lsbf_field r11
     add \result, r14 
 .endm
 
@@ -267,12 +257,12 @@
     mov rax, r11
     mov rdi, r12
     # read HLIT, HDIST and HCLEN
-    ensure_enough_bits_ad8
-    next_field_fixed_ad814 5
+    ensure_enough_bits
+    read_lsbf_fs_field 5
     mov BYTE PTR VAR(lit_sorted_table), r14b
-    next_field_fixed_ad814 5
+    read_lsbf_fs_field 5
     mov BYTE PTR VAR(dist_sorted_table), r14b
-    next_field_fixed_ad814 4
+    read_lsbf_fs_field 4
 
     # Read CLEN codes
     add r14, 4
@@ -280,8 +270,8 @@
     xor r11, r11
     lea r12, VAR(clen_len_table)
 1:
-    ensure_enough_bits_ad8
-    next_field_fixed_ad814 3
+    ensure_enough_bits
+    read_lsbf_fs_field 3
     movzx rcx, BYTE PTR [r11 + clen_codes]
     add rcx, r12
     mov BYTE PTR [rcx], r14b
@@ -289,39 +279,39 @@
     cmp r11, rbx
     jne 1b
 
-    compute_prefix_counts_bc12 clen_len_table, clen_prefix_table, 19
-    init_prefix_codes_bc9101112 clen_prefix_table, 8
-    compute_prefix_codes_bc1112 clen_len_table, clen_prefix_table, clen_sorted_table, 19, 1
+    compute_prefix_counts clen_len_table, clen_prefix_table, 19
+    compute_initial_prefix_codes_and_offsets clen_prefix_table, 8
+    compute_prefix_table_sorted_table clen_len_table, clen_prefix_table, clen_sorted_table, 19, 1
 
 # Fill in lit tables
     movzx r9, BYTE PTR VAR(lit_sorted_table)
     add r9, 257
-    decode_len_table_abd8910111214 lit_len_table, r9
-    compute_prefix_counts_bc12 lit_len_table, lit_prefix_table, 286
-    init_prefix_codes_bc9101112 lit_prefix_table, 16
-    compute_prefix_codes_bc1112 lit_len_table, lit_prefix_table, lit_sorted_table, 286, 2
+    read_encoded_len_table lit_len_table, r9
+    compute_prefix_counts lit_len_table, lit_prefix_table, 286
+    compute_initial_prefix_codes_and_offsets lit_prefix_table, 16
+    compute_prefix_table_sorted_table lit_len_table, lit_prefix_table, lit_sorted_table, 286, 2
 
 # Fill in dist tables
     movzx r9, BYTE PTR VAR(dist_sorted_table)
     inc r9
-    decode_len_table_abd8910111214 dist_len_table, r9
-    compute_prefix_counts_bc12 dist_len_table, dist_prefix_table, 32
-    init_prefix_codes_bc9101112 dist_prefix_table, 16
-    compute_prefix_codes_bc1112 dist_len_table, dist_prefix_table, dist_sorted_table, 32, 1
+    read_encoded_len_table dist_len_table, r9
+    compute_prefix_counts dist_len_table, dist_prefix_table, 32
+    compute_initial_prefix_codes_and_offsets dist_prefix_table, 16
+    compute_prefix_table_sorted_table dist_len_table, dist_prefix_table, dist_sorted_table, 32, 1
 
 decoding_loop:
-    ensure_enough_bits_ad8
-    decode_next_huffman_ad810111214 lit_prefix_table, lit_sorted_table, 2
+    ensure_enough_bits
+    read_huffman_encoded_value lit_prefix_table, lit_sorted_table, 2
     cmp r14, 0x100
     je decoding_loop_exit
     jb literal
     sub r14, 0x100
-    ensure_enough_bits_ad8
-    decode_extra_bits_fixed_ad81114 length_offsets, length_extra_bits, rcx
-    ensure_enough_bits_ad8
-    decode_next_huffman_ad810111214 dist_prefix_table, dist_sorted_table, 1
-    ensure_enough_bits_ad8
-    decode_extra_bits_fixed_ad81114 dist_offsets, dist_extra_bits, r12
+    ensure_enough_bits
+    read_extra_bits length_offsets, length_extra_bits, rcx
+    ensure_enough_bits
+    read_huffman_encoded_value dist_prefix_table, dist_sorted_table, 1
+    ensure_enough_bits
+    read_extra_bits dist_offsets, dist_extra_bits, r12
     mov r11, rsi
     mov rsi, rdi
     sub rsi, r12
@@ -345,11 +335,11 @@ decoding_loop_exit:
 read_next_block:
     test r13, r13
     jnz exit
-    ensure_enough_bits_ad8
+    ensure_enough_bits
     shr rax, 1
     adc r13, 0
     dec dl
-    next_field_fixed_ad814 2
+    read_lsbf_fs_field 2
     cmp r14, 1
     jb no_compression
     je fixed_compression
@@ -364,18 +354,18 @@ no_compression:
     xor rdx, rdx
     jmp read_next_block
 fixed_compression:
-    ensure_enough_bits_ad8
-    next_field_huffman_fixed_ad14 7
+    ensure_enough_bits
+    read_msbf_fs_field 7
     test r14, r14
     jz read_next_block
     cmp r14, 0x17
     jbe fixed_coded_7
-    next_bit_huffman_ad14
+    advance_msbf_value
     cmp r14, 0xbf
     jbe fixed_literal_8
     cmp r14, 0xc7
     jbe fixed_coded_8
-    next_bit_huffman_ad14
+    advance_msbf_value
     sub r14, 0x190
     mov BYTE PTR [rdi], r14b
     inc rdi
@@ -383,9 +373,9 @@ fixed_compression:
 fixed_coded_8:
     sub r14, 0xc0
 fixed_coded_7:
-    decode_extra_bits_fixed_ad81114 length_offsets, length_extra_bits, rcx
-    next_field_huffman_fixed_ad14 5
-    decode_extra_bits_fixed_ad81114 dist_offsets, dist_extra_bits, r12
+    read_extra_bits length_offsets, length_extra_bits, rcx
+    read_msbf_fs_field 5
+    read_extra_bits dist_offsets, dist_extra_bits, r12
     mov r11, rsi
     mov rsi, rdi
     sub rsi, r12
