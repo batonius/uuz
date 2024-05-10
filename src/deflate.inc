@@ -79,12 +79,12 @@
 
 .macro compute_prefix_counts_bc12, len_table, prefix_table, count
     mov rcx, \count
-    lea r12, [rbp - \len_table\()_offset]
+    lea r12, MVAR(len_table)
 .L_loop_\@:
     movzx rbx, BYTE PTR [r12]
     test bl, bl
     jz .L_empty_\@
-    inc WORD PTR [rbp - \prefix_table\()_offset + rbx*4]
+    inc WORD PTR IN_MVAR(prefix_table, rbx*4)
 .L_empty_\@:
     inc r12
     loop .L_loop_\@
@@ -97,31 +97,31 @@
     xor r9, r9
     mov rcx, \count
 .L_loop_\@:
-    mov bx, WORD PTR [rbp - \prefix_table\()_offset + r12*4]
+    mov bx, WORD PTR IN_MVAR(prefix_table, r12*4)
     test bx, bx
     jnz .L_non_empty_\@
-    mov DWORD PTR [rbp - \prefix_table\()_offset + r12*4], 0
+    mov DWORD PTR IN_MVAR(prefix_table, r12*4), 0
     jmp .L_next_\@
 .L_non_empty_\@:
     test r9, r9
     cmovz r9, r12
-    mov WORD PTR [rbp - \prefix_table\()_offset + r12*4 + 2], r10w
+    mov WORD PTR IN_MVAR(prefix_table, r12*4 + 2), r10w
     add r10w, bx
-    mov WORD PTR [rbp - \prefix_table\()_offset + r12*4], r11w
+    mov WORD PTR IN_MVAR(prefix_table, r12*4), r11w
     add r11w, bx
 .L_next_\@:
     shl r11, 1
     inc r12
     loop .L_loop_\@
     dec r9w
-    mov WORD PTR [rbp - \prefix_table\()_offset], r9w
+    mov WORD PTR IN_MVAR(prefix_table, 0), r9w
 .endm
 
-.macro decode_len_table_abd8910111214 len_table_name, count
+.macro decode_len_table_abd8910111214 len_table, count
 .ifnc \count, r9
     movzx r9, \count
 .endif
-    lea rbx, [rbp - \len_table_name\()_offset]
+    lea rbx, MVAR(len_table)
     add r9, rbx
 .L_loop_\@:
     cmp rbx, r9
@@ -163,29 +163,29 @@
     xor r11, r11
     mov rcx, \count
 .L_loop_\@:
-    movzx rbx, BYTE PTR [rbp - \len_table\()_offset + r11]
+    movzx rbx, BYTE PTR IN_MVAR(len_table, r11)
     test bl, bl
     jz .L_empty_\@
-    movzx r12, WORD PTR [rbp - \prefix_table\()_offset + rbx*4 + 2]
+    movzx r12, WORD PTR IN_MVAR(prefix_table, rbx*4 + 2)
 .ifeq \size - 1
-    mov BYTE PTR [rbp - \sorted_table\()_offset + r12], r11b
+    mov BYTE PTR IN_MVAR(sorted_table, r12), r11b
 .else
-    mov WORD PTR [rbp - \sorted_table\()_offset + r12*2], r11w
+    mov WORD PTR IN_MVAR(sorted_table, r12*2), r11w
 .endif
-    inc WORD PTR [rbp - \prefix_table\()_offset + rbx*4 + 2]
-    inc WORD PTR [rbp - \prefix_table\()_offset + rbx*4]
+    inc WORD PTR IN_MVAR(prefix_table, rbx*4 + 2)
+    inc WORD PTR IN_MVAR(prefix_table, rbx*4)
 .L_empty_\@:
     inc r11
     loop .L_loop_\@
 .endm
 
-.macro decode_next_huffman_ad810111214, prefix_table_name, sorted_table_name, value_size
-    movzx r11, WORD PTR [rbp - \prefix_table_name\()_offset]
+.macro decode_next_huffman_ad810111214, prefix_table, sorted_table, value_size
+    movzx r11, WORD PTR MVAR(prefix_table)
     next_field_huffman_ad814 r11
 .L_loop_\@:
     next_bit_huffman_ad14
     inc r11
-    mov r12d, DWORD PTR [rbp - \prefix_table_name\()_offset + r11*4]
+    mov r12d, DWORD PTR IN_MVAR(prefix_table, r11*4)
     test r12d, r12d
     jz .L_loop_\@
     mov r10w, r12w
@@ -194,9 +194,9 @@
     shr r12, 16
     sub r12w, r10w
     .ifeq \value_size - 1
-        movzx r14, BYTE PTR [rbp - \sorted_table_name\()_offset + r12]
+        movzx r14, BYTE PTR IN_MVAR(sorted_table, r12)
     .else
-        movzx r14, WORD PTR [rbp - \sorted_table_name\()_offset + r12*2]
+        movzx r14, WORD PTR IN_MVAR(sorted_table, r12*2)
     .endif
 .endm
 

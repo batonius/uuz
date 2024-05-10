@@ -8,13 +8,15 @@ BIN=uuz
 all: $(BIN)
 
 $(BIN).o: src/$(BIN).S src/*.inc Makefile
-	$(CC) -c $< -o $@
+	$(CC) -g -c $< -o $@
 
 $(BIN): $(BIN).o
-	# objcopy -R '.*' --keep-section '.text' $<
-	# $(LD) -s -n $< -o $@
-	# objcopy -R '.*' --keep-section '.text' $@
+ifdef DEBUG
 	$(LD) -n $< -o $@
+else
+	$(LD) -s -n $< -o $@
+	objcopy -R '.*' --keep-section '.text' $@
+endif
 
 clean:
 	rm -f $(BIN)

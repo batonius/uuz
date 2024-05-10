@@ -8,12 +8,6 @@
 
 #define FILE_NAME_BUFFER_SIZE 1024
 
-.macro sys_call_or error_label, idx=rax, a=rdi, b=rsi, c=rdx, d=r10, e=r8, f=r9
-    sys_call \idx, \a, \b, \c, \d, \e, \f
-    cmp rax, SYSCALL_FAIL
-    ja \error_label    
-.endm
-
 .text
 .global _start
 _start:

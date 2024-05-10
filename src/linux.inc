@@ -44,3 +44,34 @@
 //madvise define
 #define MADV_SEQUENTIAL 2
 #define MADV_WILLNEED 3
+
+.macro sys_call idx=rax, a=rdi, b=rsi, c=rdx, d=r10, e=r8, f=r9
+.ifnc \f,r9
+    mov r9, \f
+.endif
+.ifnc \e,r8
+    mov r8, \e
+.endif
+.ifnc \d,r10
+    mov r10, \d
+.endif
+.ifnc \c,rdx
+    mov rdx, \c
+.endif
+.ifnc \b,rsi
+    mov rsi, \b
+.endif
+.ifnc \a,rdi
+    mov rdi, \a
+.endif
+.ifnc \idx,rax
+    mov rax, \idx
+.endif
+    syscall
+.endm
+
+.macro sys_call_or error_label, idx=rax, a=rdi, b=rsi, c=rdx, d=r10, e=r8, f=r9
+    sys_call \idx, \a, \b, \c, \d, \e, \f
+    cmp rax, SYSCALL_FAIL
+    ja \error_label
+.endm
