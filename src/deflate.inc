@@ -321,6 +321,7 @@ decoding_loop_exit:
 .endm
 
 .macro deflate
+    xor rax, rax
     xor rdx, rdx
     mov r15, 1
     mov BYTE PTR VAR(last_block_flag), 0

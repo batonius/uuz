@@ -20,6 +20,7 @@ begin_frame
     local_var out_fd, 8
     local_var out_file_buffer, 8
     local_var out_file_buffer_length, 8
+    local_var tsc, 8
     # Deflate vars
     local_var last_block_flag, 1
     local_var deflate_data_end, 0
@@ -82,7 +83,17 @@ end_frame
     # ! rsi is the compressed buffer position
     # - r12
     # >> do deflate
+    rdtsc
+    shl rdx, 32
+    or rdx, rax
+    mov VAR(tsc), rdx
     deflate
+    rdtsc
+    shl rdx, 32
+    or rdx, rax
+    sub rdx, VAR(tsc)
+    lea rdi, IN_VAR(file_name_buffer, FILE_NAME_BUFFER_SIZE - 1)
+    call eprint_rdx
     # sys_call_or out_file_error, SYS_MUNMAP, VAR(out_file_buffer), VAR(out_file_buffer_len)
     sys_call SYS_CLOSE, VAR(out_fd)
     # > File processing loop end
@@ -104,6 +115,31 @@ in_file_error:
     sys_call SYS_WRITE, STDOUT, \
         "offset out_file_error_msg", "offset out_file_error_msg_len"
     sys_call SYS_EXIT, rbx
+    ret
+
+eprint_rdx:
+    mov rsi, rdi
+    mov BYTE PTR [rdi], 0xa
+    dec rdi
+    mov rcx, 16
+1:
+    mov al, dl
+    and al, 0xf
+    cmp al, 0xa
+    jge 2f
+    add al, 0x30
+    jmp 3f
+2:
+    add al, 87
+3:
+    mov BYTE PTR [rdi], al
+    dec rdi
+    shr rdx, 4
+    dec rcx
+    jnz 1b
+    sub rsi, rdi
+    inc rdi
+    sys_call SYS_WRITE, STDERR, rdi, rsi
     ret
 
 str_lit no_file_msg, "Can't open file.\n"
