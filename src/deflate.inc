@@ -10,17 +10,15 @@
 # rdx - bit buffer bits left
 # rsi - current compressed position
 # rdi - current uncompressed position
-# r13 - final block flag
 # r15 - always 1
 
-# Local variables:
-# rcx - rep counts
-# r8 - temporary
-# r9  - temporary
-# r10 - temporary
-# r11 - temporary
-# r12 - temporary
-# r14 - temporary
+# Local variables: r8-r14
+
+#define PREFIX_LENGTH(table, reg) WORD PTR IN_MVAR(table, reg*4)
+#define PREFIX_CODE(table, reg) WORD PTR IN_MVAR(table, reg*4)
+#define PREFIX_OFFSET(table, reg) WORD PTR IN_MVAR(table, reg*4 + 2)
+#define PREFIX_DATA(table, reg) DWORD PTR IN_MVAR(table, reg*4)
+#define PREFIX_FIRST_NONEMPTY(table) WORD PTR MVAR(table)
 
 .macro advance_msbf_value
     shr rax, 1
@@ -87,7 +85,7 @@
     movzx r10, BYTE PTR [r8]
     test r10b, r10b
     jz .L_empty_\@
-    inc WORD PTR IN_MVAR(prefix_table, r10*4)
+    inc PREFIX_LENGTH(prefix_table, r10)
 .L_empty_\@:
     inc r8
     cmp r8, r9
@@ -100,17 +98,17 @@
     xor r10, r10 # Curent prefix offset
     xor r11, r11 # Current prefix code
 .L_loop_\@:
-    mov r12w, WORD PTR IN_MVAR(prefix_table, r8*4)
+    mov r12w, PREFIX_LENGTH(prefix_table, r8)
     test r12w, r12w
     jnz .L_non_empty_\@
-    mov DWORD PTR IN_MVAR(prefix_table, r8*4), 0
+    mov PREFIX_OFFSET(prefix_table, r8), 0
     jmp .L_next_\@
 .L_non_empty_\@:
     test r9, r9
     cmovz r9, r8
-    mov WORD PTR IN_MVAR(prefix_table, r8*4 + 2), r10w
+    mov PREFIX_OFFSET(prefix_table, r8), r10w
     add r10w, r12w
-    mov WORD PTR IN_MVAR(prefix_table, r8*4), r11w
+    mov PREFIX_CODE(prefix_table, r8), r11w
     add r11w, r12w
 .L_next_\@:
     shl r11, 1
@@ -118,7 +116,7 @@
     cmp r8, \count
     jne .L_loop_\@
     dec r9w
-    mov WORD PTR IN_MVAR(prefix_table, 0), r9w
+    mov PREFIX_FIRST_NONEMPTY(prefix_table), r9w
 .endm
 
 .macro read_encoded_len_table, len_table, count
@@ -165,14 +163,14 @@
     movzx r9, BYTE PTR IN_MVAR(len_table, r8)
     test r9, r9
     jz .L_empty_\@
-    movzx r10, WORD PTR IN_MVAR(prefix_table, r9*4 + 2)
+    movzx r10, PREFIX_OFFSET(prefix_table, r9)
 .ifeq \size - 1
     mov BYTE PTR IN_MVAR(sorted_table, r10), r8b
 .else
     mov WORD PTR IN_MVAR(sorted_table, r10*2), r8w
 .endif
-    inc WORD PTR IN_MVAR(prefix_table, r9*4 + 2)
-    inc WORD PTR IN_MVAR(prefix_table, r9*4)
+    inc PREFIX_OFFSET(prefix_table, r9)
+    inc PREFIX_CODE(prefix_table, r9)
 .L_empty_\@:
     inc r8
     cmp r8, \count
@@ -180,17 +178,16 @@
 .endm
 
 .macro read_huffman_encoded_value, prefix_table, sorted_table, value_size
-    movzx r9, WORD PTR MVAR(prefix_table) # Start with first not empty prefix
+    prefetchw IN_MVAR(sorted_table, 0)
+    movzx r9, PREFIX_FIRST_NONEMPTY(prefix_table) # Start with first not empty prefix
     read_msbf_field r9
 .L_loop_\@:
     advance_msbf_value
     inc r9
     mov r10d, DWORD PTR IN_MVAR(prefix_table, r9*4)
-    test r10d, r10d
-    jz .L_loop_\@
-    mov r8w, r10w
-    sub r8w, bx
+    sub r10w, bx
     jbe .L_loop_\@
+    mov r8w, r10w
     shr r10, 16
     sub r10w, r8w
     .ifeq \value_size - 1
@@ -244,15 +241,15 @@
 
 .macro dynamic_compression
     # memset 
-    mov r11, rax
-    mov r12, rdi
+    mov r8, rax
+    mov r9, rdi
     xor rax, rax
     lea rdi, VAR(deflate_data_start)
     lea rcx, VAR(deflate_data_end)
     sub rcx, rdi
     rep stosb
-    mov rax, r11
-    mov rdi, r12
+    mov rax, r8
+    mov rdi, r9
     # read HLIT, HDIST and HCLEN
     ensure_enough_bits
     read_lsbf_fs_field 5
@@ -326,14 +323,14 @@ decoding_loop_exit:
 .macro deflate
     xor rdx, rdx
     mov r15, 1
-    xor r13, r13
+    mov BYTE PTR VAR(last_block_flag), 0
 read_next_block:
-    test r13, r13
+    mov r8b, BYTE PTR VAR(last_block_flag)
+    test r8b, r8b
     jnz exit
     ensure_enough_bits
-    shr rax, 1
-    adc r13, 0
-    dec dl
+    read_lsbf_fs_field 1
+    mov BYTE PTR VAR(last_block_flag), bl
     read_lsbf_fs_field 2
     cmp rbx, 1
     jb no_compression
@@ -370,12 +367,12 @@ fixed_coded_8:
 fixed_coded_7:
     read_extra_bits rbx, length_offsets, length_extra_bits, rcx
     read_msbf_fs_field 5
-    read_extra_bits rbx, dist_offsets, dist_extra_bits, r12
-    mov r11, rsi
+    read_extra_bits rbx, dist_offsets, dist_extra_bits, r9
+    mov r8, rsi
     mov rsi, rdi
-    sub rsi, r12
+    sub rsi, r9
     memcpy
-    mov rsi, r11
+    mov rsi, r8
     jmp fixed_compression
 fixed_literal_8:
     sub rbx, 0x30

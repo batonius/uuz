@@ -21,6 +21,7 @@ begin_frame
     local_var out_file_buffer, 8
     local_var out_file_buffer_length, 8
     # Deflate vars
+    local_var last_block_flag, 1
     local_var deflate_data_end, 0
     local_var clen_len_table, 1*19
     local_var clen_sorted_table, 1*19
