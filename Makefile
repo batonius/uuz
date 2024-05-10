@@ -2,13 +2,19 @@ CC=clang
 LD=ld
 BIN=uuz
 
+ifdef DEBUG
+	CCFLAGS=-g -DDEBUG
+else
+	CCLFAGS=
+endif
+
 .SUFFIXES:
 .PHONY: all clean
 
 all: $(BIN)
 
 $(BIN).o: src/$(BIN).S src/*.inc Makefile
-	$(CC) -g -c $< -o $@
+	$(CC) $(CCFLAGS) -c $< -o $@
 
 $(BIN): $(BIN).o
 ifdef DEBUG

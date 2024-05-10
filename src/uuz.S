@@ -47,7 +47,7 @@ end_frame
     mov VAR(zip_file_size), rax
     add rax, 1024
     sys_call_or in_file_error, SYS_MMAP, 0, rax, \
-        PROT_READ, MAP_PRIVATE, VAR(zip_file_fd), 0
+        PROT_READ, MAP_PRIVATE | MAP_POPULATE, VAR(zip_file_fd), 0
     mov r12, rax
     mov VAR(zip_file_buffer), rax
     sys_call_or in_file_error, SYS_MADVISE, rax, VAR(zip_file_size), MADV_SEQUENTIAL
@@ -68,10 +68,15 @@ end_frame
     mov ebx, DWORD PTR [r12 + LFH_UNCOMPRESSED_SIZE]
     # ! rbx is the uncompressed file size left
     mov VAR(out_file_buffer_length), rbx
+#ifdef DEBUG
+    sys_call_or out_file_error, SYS_MMAP, 0, rbx, \
+        PROT_WRITE, MAP_SHARED | MAP_POPULATE | MAP_ANONYMOUS, VAR(out_fd), 0
+#else
     sys_call_or out_file_error, SYS_FTRUNCATE, rax, rbx
     add rbx, 1024
     sys_call_or out_file_error, SYS_MMAP, 0, rbx, \
-        PROT_WRITE, MAP_SHARED, VAR(out_fd), 0
+        PROT_WRITE, MAP_SHARED | MAP_POPULATE, VAR(out_fd), 0
+#endif
     mov VAR(out_file_buffer), rax
     sys_call_or in_file_error, SYS_MADVISE, rax, VAR(out_file_buffer_length), MADV_SEQUENTIAL
     mov rdi, VAR(out_file_buffer)
@@ -83,17 +88,21 @@ end_frame
     # ! rsi is the compressed buffer position
     # - r12
     # >> do deflate
+#ifdef DEBUG
     rdtsc
     shl rdx, 32
     or rdx, rax
     mov VAR(tsc), rdx
+#endif
     deflate
+#ifdef DEBUG
     rdtsc
     shl rdx, 32
     or rdx, rax
     sub rdx, VAR(tsc)
     lea rdi, IN_VAR(file_name_buffer, FILE_NAME_BUFFER_SIZE - 1)
     call eprint_rdx
+#endif
     # sys_call_or out_file_error, SYS_MUNMAP, VAR(out_file_buffer), VAR(out_file_buffer_len)
     sys_call SYS_CLOSE, VAR(out_fd)
     # > File processing loop end
@@ -117,6 +126,7 @@ in_file_error:
     sys_call SYS_EXIT, rbx
     ret
 
+#ifdef DEBUG
 eprint_rdx:
     mov rsi, rdi
     mov BYTE PTR [rdi], 0xa
@@ -141,6 +151,7 @@ eprint_rdx:
     inc rdi
     sys_call SYS_WRITE, STDERR, rdi, rsi
     ret
+#endif
 
 str_lit no_file_msg, "Can't open file.\n"
 str_lit out_file_error_msg, "Can't create output file.\n"

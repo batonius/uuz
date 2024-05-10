@@ -38,6 +38,10 @@
 #define PROT_WRITE 2
 #define MAP_PRIVATE 2
 #define MAP_SHARED 1
+#define MAP_ANONYMOUS 0x20
+#define MAP_POPULATE 0x8000
+#define MAP_NONBLOCK 0x10000
+
 
 //msync defines
 #define MS_SYNC 4
