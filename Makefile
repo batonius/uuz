@@ -1,11 +1,17 @@
 CC=clang
 LD=ld
 BIN=uuz
+CFLAGS=
+LDFLAGS=
 
 ifdef DEBUG
-	CCFLAGS=-g -DDEBUG
+	CFLAGS+= -g -DDEBUG
 else
-	CCLFAGS=
+	LDFLAGS+= -s
+endif
+
+ifdef DRYRUN
+	CFLAGS+= -DDRYRUN
 endif
 
 .SUFFIXES:
@@ -14,13 +20,11 @@ endif
 all: $(BIN)
 
 $(BIN).o: src/$(BIN).S src/*.inc Makefile
-	$(CC) $(CCFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BIN): $(BIN).o
-ifdef DEBUG
-	$(LD) -n $< -o $@
-else
-	$(LD) -s -n $< -o $@
+	$(LD) $(LDFLAGS) -n $< -o $@
+ifndef DEBUG
 	objcopy -R '.*' --keep-section '.text' $@
 endif
 

@@ -14,10 +14,9 @@
 
 # Local variables: r8-r14
 
-#define PREFIX_LENGTH(table, reg) WORD PTR IN_MVAR(table, reg*4)
-#define PREFIX_CODE(table, reg) WORD PTR IN_MVAR(table, reg*4)
-#define PREFIX_OFFSET(table, reg) WORD PTR IN_MVAR(table, reg*4 + 2)
-#define PREFIX_DATA(table, reg) DWORD PTR IN_MVAR(table, reg*4)
+#define PREFIX_LENGTH(table, reg) WORD PTR IN_MVAR(table, reg*2)
+#define PREFIX_CODE(table, reg) WORD PTR IN_MVAR(table, reg*2)
+#define PREFIX_OFFSET(table, reg) WORD PTR IN_MVAR(table, reg*2 + 32)
 #define PREFIX_FIRST_NONEMPTY(table) WORD PTR MVAR(table)
 
 .macro advance_msbf_value
@@ -115,7 +114,6 @@
     inc r8
     cmp r8, \count
     jne .L_loop_\@
-    dec r9w
     mov PREFIX_FIRST_NONEMPTY(prefix_table), r9w
 .endm
 
@@ -181,19 +179,25 @@
     prefetchw IN_MVAR(sorted_table, 0)
     movzx r9, PREFIX_FIRST_NONEMPTY(prefix_table) # Start with first not empty prefix
     read_msbf_field r9
-.L_loop_\@:
-    advance_msbf_value
-    inc r9
-    mov r10d, DWORD PTR IN_MVAR(prefix_table, r9*4)
-    sub r10w, bx
-    jbe .L_loop_\@
-    mov r8w, r10w
-    shr r10, 16
-    sub r10w, r8w
+
+    .rept 4
+        mov r10, QWORD PTR IN_MVAR(prefix_table, r9*2)
+        .rept 4
+            sub r10w, bx
+            ja .L_found_\@
+            advance_msbf_value
+            inc r9
+            shr r10, 16
+        .endr 
+    .endr
+
+.L_found_\@:
+    mov r8w, PREFIX_OFFSET(prefix_table, r9)
+    sub r8w, r10w
     .ifeq \value_size - 1
-        movzx rbx, BYTE PTR IN_MVAR(sorted_table, r10)
+        movzx rbx, BYTE PTR IN_MVAR(sorted_table, r8)
     .else
-        movzx rbx, WORD PTR IN_MVAR(sorted_table, r10*2)
+        movzx rbx, WORD PTR IN_MVAR(sorted_table, r8*2)
     .endif
 .endm
 

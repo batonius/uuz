@@ -22,18 +22,19 @@ begin_frame
     local_var out_file_buffer_length, 8
     local_var tsc, 8
     # Deflate vars
-    local_var last_block_flag, 1
+    local_var last_block_flag, 8
     local_var deflate_data_end, 0
-    local_var clen_len_table, 1*19
-    local_var clen_sorted_table, 1*19
-    local_var clen_prefix_table, 4*8
-    local_var lit_len_table, 1*286
-    local_var lit_sorted_table, 2*286
-    local_var lit_prefix_table, 4*16
+    local_var clen_len_table, 1*24
+    local_var clen_sorted_table, 1*24
+    local_var clen_prefix_table, 2*2*16
+    local_var lit_len_table, 1*288
+    local_var lit_sorted_table, 2*288
+    local_var lit_prefix_table, 2*2*16
     local_var dist_len_table, 1*32
     local_var dist_sorted_table, 1*32
-    local_var dist_prefix_table, 4*16
+    local_var dist_prefix_table, 2*2*16
     local_var deflate_data_start, 0
+    local_var padding, 1024
 end_frame
 
     # > Open and mmap file
@@ -53,6 +54,14 @@ end_frame
     sys_call_or in_file_error, SYS_MADVISE, rax, VAR(zip_file_size), MADV_SEQUENTIAL
     # + r12 is the start of the current file header
     # > File processing loop
+    mov ebx, DWORD PTR [r12 + LFH_UNCOMPRESSED_SIZE]
+    # ! rbx is the uncompressed file size left
+    mov VAR(out_file_buffer_length), rbx
+#ifdef DRYRUN
+    add rbx, 1024
+    sys_call_or out_file_error, SYS_MMAP, 0, rbx, \
+        PROT_WRITE, MAP_SHARED | MAP_POPULATE | MAP_ANONYMOUS, -1, 0
+#else
     # >> Open and mmap file
     movzx rcx, WORD PTR [r12 + LFH_FILE_NAME_LENGHT]
     cmp rcx, FILE_NAME_BUFFER_SIZE
@@ -65,13 +74,6 @@ end_frame
     sys_call_or out_file_error, SYS_OPENAT, AT_FDCWD, rsi, \
         O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR
     mov VAR(out_fd), rax
-    mov ebx, DWORD PTR [r12 + LFH_UNCOMPRESSED_SIZE]
-    # ! rbx is the uncompressed file size left
-    mov VAR(out_file_buffer_length), rbx
-#ifdef DEBUG
-    sys_call_or out_file_error, SYS_MMAP, 0, rbx, \
-        PROT_WRITE, MAP_SHARED | MAP_POPULATE | MAP_ANONYMOUS, VAR(out_fd), 0
-#else
     sys_call_or out_file_error, SYS_FTRUNCATE, rax, rbx
     add rbx, 1024
     sys_call_or out_file_error, SYS_MMAP, 0, rbx, \
@@ -128,6 +130,7 @@ in_file_error:
 
 #ifdef DEBUG
 eprint_rdx:
+    shr rdx, 16
     mov rsi, rdi
     mov BYTE PTR [rdi], 0xa
     dec rdi
