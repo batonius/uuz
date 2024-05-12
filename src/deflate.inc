@@ -10,9 +10,8 @@
 # rdx - bit buffer bits left
 # rsi - current compressed position
 # rdi - current uncompressed position
-# r15 - always 1
 
-# Local variables: r8-r14
+# Local variables: r8-r15
 
 #define PREFIX_LENGTH(table, reg) WORD PTR IN_MVAR(table, reg*2)
 #define PREFIX_CODE(table, reg) WORD PTR IN_MVAR(table, reg*2)
@@ -20,18 +19,16 @@
 #define PREFIX_FIRST_NONEMPTY(table) WORD PTR MVAR(table)
 
 .macro advance_msbf_value
-    shl rbx, 1
     shr rax, 1
-    adc rbx, 0
+    rcl rbx, 1
     dec dl
 .endm
 
 .macro read_msbf_fs_field, field_size
     xor rbx, rbx
     .rept \field_size
-        shl rbx, 1
         shr rax, 1
-        adc rbx, 0
+        rcl rbx, 1
     .endr
     sub dl, \field_size
 .endm
@@ -40,9 +37,8 @@
     xor rbx, rbx
     mov r8, \field_size
 .L_loop_\@:
-    shl rbx, 1
     shr rax, 1
-    adc rbx, 0
+    rcl rbx, 1
     dec r8
     jnz .L_loop_\@
     sub rdx, \field_size
@@ -192,7 +188,7 @@
     .endr
 
 .L_found_\@:
-    mov r8w, PREFIX_OFFSET(prefix_table, r9)
+    movzx r8, PREFIX_OFFSET(prefix_table, r9)
     sub r8w, r10w
     .ifeq \value_size - 1
         movzx rbx, BYTE PTR IN_MVAR(sorted_table, r8)
@@ -327,7 +323,6 @@ decoding_loop_exit:
 .macro deflate
     xor rax, rax
     xor rdx, rdx
-    mov r15, 1
     mov BYTE PTR VAR(last_block_flag), 0
 read_next_block:
     mov r8b, BYTE PTR VAR(last_block_flag)
