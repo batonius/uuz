@@ -20,17 +20,17 @@
 #define PREFIX_FIRST_NONEMPTY(table) WORD PTR MVAR(table)
 
 .macro advance_msbf_value
+    shl rbx, 1
     shr rax, 1
-    dec dl
-    shlx rbx, rbx, r15
     adc rbx, 0
+    dec dl
 .endm
 
 .macro read_msbf_fs_field, field_size
     xor rbx, rbx
     .rept \field_size
+        shl rbx, 1
         shr rax, 1
-        shlx rbx, rbx, r15
         adc rbx, 0
     .endr
     sub dl, \field_size
@@ -40,8 +40,8 @@
     xor rbx, rbx
     mov r8, \field_size
 .L_loop_\@:
+    shl rbx, 1
     shr rax, 1
-    shlx rbx, rbx, r15
     adc rbx, 0
     dec r8
     jnz .L_loop_\@
