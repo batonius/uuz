@@ -72,9 +72,9 @@
 .L_exit_\@:
 .endm
 
-.macro compute_prefix_counts, len_table, prefix_table, count
+.macro compute_prefix_counts, prefix_table, count
     mov rcx, \count
-    lea r8, MVAR(len_table)
+    lea r8, VAR(len_table)
     lea r9, [r8 + \count]
 .L_loop_\@:
     movzx r10, BYTE PTR [r8]
@@ -113,7 +113,7 @@
     mov PREFIX_FIRST_NONEMPTY(prefix_table), r9w
 .endm
 
-.macro read_encoded_len_table, len_table, count
+.macro read_encoded_len_table, count
     xor r11, r11
 .L_loop_\@:
     cmp r11, \count
@@ -125,25 +125,25 @@
     je .L_extra_3_bits_\@
     cmp rbx, 16
     je .L_extra_2_bits_\@
-    mov BYTE PTR IN_MVAR(len_table, r11), bl
+    mov BYTE PTR IN_VAR(len_table, r11), bl
     inc r11
     jb .L_loop_\@
 .L_extra_7_bits_\@:
     read_lsbf_fs_field 7
     add rbx, 11
-    add r11, rbx
-    jmp .L_loop_\@
+    mov r8b, 0
+    jmp .L_copy_loop_\@
 .L_extra_3_bits_\@:
     read_lsbf_fs_field 3
     add rbx, 3
-    add r11, rbx
-    jmp .L_loop_\@
+    mov r8b, 0
+    jmp .L_copy_loop_\@
 .L_extra_2_bits_\@:
     read_lsbf_fs_field 2
     add rbx, 3
-    mov r8b, BYTE PTR IN_MVAR(len_table, r11 - 1)
+    mov r8b, BYTE PTR IN_VAR(len_table, r11 - 1)
 .L_copy_loop_\@:
-    mov BYTE PTR IN_MVAR(len_table, r11), r8b
+    mov BYTE PTR IN_VAR(len_table, r11), r8b
     inc r11
     dec rbx
     jnz .L_copy_loop_\@
@@ -151,10 +151,10 @@
 .L_exit_\@:
 .endm
 
-.macro compute_prefix_table_sorted_table, len_table, prefix_table, sorted_table, count, size
+.macro compute_prefix_table_sorted_table, prefix_table, sorted_table, count, size
     xor r8, r8
 .L_loop_\@:
-    movzx r9, BYTE PTR IN_MVAR(len_table, r8)
+    movzx r9, BYTE PTR IN_VAR(len_table, r8)
     test r9, r9
     jz .L_empty_\@
     movzx r10, PREFIX_OFFSET(prefix_table, r9)
@@ -266,30 +266,30 @@
     ensure_enough_bits
     read_lsbf_fs_field 3
     movzx r10, BYTE PTR [r9 + clen_codes]
-    mov BYTE PTR IN_VAR(clen_len_table, r10), bl
+    mov BYTE PTR IN_VAR(len_table, r10), bl
     inc r9
     cmp r9, r11
     jne 1b
 
-    compute_prefix_counts clen_len_table, clen_prefix_table, 19
+    compute_prefix_counts clen_prefix_table, 19
     compute_initial_prefix_codes_and_offsets clen_prefix_table, 8
-    compute_prefix_table_sorted_table clen_len_table, clen_prefix_table, clen_sorted_table, 19, 1
+    compute_prefix_table_sorted_table clen_prefix_table, clen_sorted_table, 19, 1
 
 # Fill in lit tables
     movzx r12, BYTE PTR VAR(lit_sorted_table)
     add r12, 257
-    read_encoded_len_table lit_len_table, r12
-    compute_prefix_counts lit_len_table, lit_prefix_table, 286
+    read_encoded_len_table r12
+    compute_prefix_counts lit_prefix_table, 286
     compute_initial_prefix_codes_and_offsets lit_prefix_table, 16
-    compute_prefix_table_sorted_table lit_len_table, lit_prefix_table, lit_sorted_table, 286, 2
+    compute_prefix_table_sorted_table lit_prefix_table, lit_sorted_table, 286, 2
 
 # Fill in dist tables
     movzx r12, BYTE PTR VAR(dist_sorted_table)
     inc r12
-    read_encoded_len_table dist_len_table, r12
-    compute_prefix_counts dist_len_table, dist_prefix_table, 32
+    read_encoded_len_table r12
+    compute_prefix_counts dist_prefix_table, 32
     compute_initial_prefix_codes_and_offsets dist_prefix_table, 16
-    compute_prefix_table_sorted_table dist_len_table, dist_prefix_table, dist_sorted_table, 32, 1
+    compute_prefix_table_sorted_table dist_prefix_table, dist_sorted_table, 32, 1
 
 decoding_loop:
     ensure_enough_bits

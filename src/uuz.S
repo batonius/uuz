@@ -24,13 +24,11 @@ begin_frame
     # Deflate vars
     local_var last_block_flag, 8
     local_var deflate_data_end, 0
-    local_var clen_len_table, 1*24
+    local_var len_table, 1*288
     local_var clen_sorted_table, 1*24
     local_var clen_prefix_table, 2*2*16
-    local_var lit_len_table, 1*288
     local_var lit_sorted_table, 2*288
     local_var lit_prefix_table, 2*2*16
-    local_var dist_len_table, 1*32
     local_var dist_sorted_table, 1*32
     local_var dist_prefix_table, 2*2*16
     local_var deflate_data_start, 0
