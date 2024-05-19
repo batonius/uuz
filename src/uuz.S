@@ -10,6 +10,7 @@
 
 .text
 .global _start
+.type _start, %function
 _start:
 begin_frame
     # IO vars
@@ -125,6 +126,7 @@ in_file_error:
         "offset out_file_error_msg", "offset out_file_error_msg_len"
     sys_call SYS_EXIT, rbx
     ret
+.size _start, (. - _start)
 
 #ifdef DEBUG
 eprint_rdx:
