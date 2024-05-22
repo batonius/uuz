@@ -4,6 +4,7 @@ test_data
 *.o
 *.gdb
 *.json
+*.zip
 perf*
 uuz-c
 uuz-asm

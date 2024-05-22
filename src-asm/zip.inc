@@ -1,4 +1,5 @@
 // LFH for Local File Header
+#define COMPRESSION_METHOD_DEFLATE 8
 #define LFH_COMPRESSION_METHOD 8
 #define LFH_CRC 14
 #define LFH_COMPRESSED_SIZE 18

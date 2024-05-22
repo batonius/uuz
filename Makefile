@@ -4,19 +4,22 @@ ASM_BIN=uuz-asm
 C_BIN=uuz-c
 ASM_SRC=src-asm
 C_SRC=src-c
+ASMFLAGS=
 CFLAGS=-Wall -Wextra -Werror -pedantic -std=c2x -march=native
 LDFLAGS=
 
 ifdef DEBUG
-	CFLAGS+=-g -DDEBUG
+	CFLAGS+=-g
+	ASMFLAGS+=-g -DDEBUG
 else ifdef DEBUGO3
 	CFLAGS+=-g -O3
 else
+	CFLAGS+=-s -O3
 	LDFLAGS+=-s
 endif
 
 ifdef DRYRUN
-	CFLAGS+= -DDRYRUN
+	ASMFLAGS+= -DDRYRUN
 endif
 
 .PHONY: all clean
@@ -24,7 +27,7 @@ endif
 all: $(ASM_BIN) $(C_BIN)
 
 $(ASM_BIN).o: $(ASM_SRC)/$(ASM_BIN).S $(ASM_SRC)/*.inc Makefile
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(ASMFLAGS) -c $< -o $@
 
 $(ASM_BIN): $(ASM_BIN).o
 	$(LD) $(LDFLAGS) -n $< -o $@

@@ -36,8 +36,6 @@ begin_frame
     local_var padding, 1024
 end_frame
 
-    # > Open and mmap file
-    # * [rbp] is `argc`, [rbp + 8 + 8 * n] is `argv[n]`
     mov rax, [rbp]
     cmp rax, 1
     jbe in_file_error
@@ -51,17 +49,13 @@ end_frame
     mov r12, rax
     mov VAR(zip_file_buffer), rax
     sys_call_or in_file_error, SYS_MADVISE, rax, VAR(zip_file_size), MADV_SEQUENTIAL
-    # + r12 is the start of the current file header
-    # > File processing loop
     mov ebx, DWORD PTR [r12 + LFH_UNCOMPRESSED_SIZE]
-    # ! rbx is the uncompressed file size left
     mov VAR(out_file_buffer_length), rbx
 #ifdef DRYRUN
     add rbx, 1024
     sys_call_or out_file_error, SYS_MMAP, 0, rbx, \
         PROT_WRITE, MAP_SHARED | MAP_POPULATE | MAP_ANONYMOUS, -1, 0
 #else
-    # >> Open and mmap file
     movzx rcx, WORD PTR [r12 + LFH_FILE_NAME_LENGHT]
     cmp rcx, FILE_NAME_BUFFER_SIZE
     jge in_file_error
@@ -81,14 +75,17 @@ end_frame
     mov VAR(out_file_buffer), rax
     sys_call_or in_file_error, SYS_MADVISE, rax, VAR(out_file_buffer_length), MADV_SEQUENTIAL
     mov rdi, VAR(out_file_buffer)
-    # ! rdi is the uncompressed buffer position
     movzx rsi, WORD PTR [r12 + LFH_FILE_NAME_LENGHT]
     add si, WORD PTR [r12 + LFH_EXTRA_LENGTH]
     add rsi, LFH_HEADER_SIZE
     add rsi, r12
-    # ! rsi is the compressed buffer position
-    # - r12
-    # >> do deflate
+    movzx rax, WORD PTR [r12 + LFH_COMPRESSION_METHOD]
+    cmp rax, COMPRESSION_METHOD_DEFLATE
+    je deflate
+    mov rcx, VAR(out_file_buffer_length)
+    memcpy
+    jmp finish
+deflate:
 #ifdef DEBUG
     rdtsc
     shl rdx, 32
@@ -104,9 +101,8 @@ end_frame
     lea rdi, IN_VAR(file_name_buffer, FILE_NAME_BUFFER_SIZE - 1)
     call eprint_rdx
 #endif
-    # sys_call_or out_file_error, SYS_MUNMAP, VAR(out_file_buffer), VAR(out_file_buffer_len)
+finish:
     sys_call SYS_CLOSE, VAR(out_fd)
-    # > File processing loop end
     sys_call SYS_CLOSE, VAR(zip_file_fd)
     sys_call SYS_EXIT, 0
     ret
