@@ -1,7 +1,9 @@
 uuz
-uuz.o
 test_data
-*.gdb
 .gdb_history
+*.o
+*.gdb
 *.json
 perf*
+uuz-c
+uuz-asm
